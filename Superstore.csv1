@@ -1,0 +1,142 @@
+SELECT * FROM superstore;
+
+ # a)sales analysis (find total sales)
+ select round(sum(sales),2)from superstore;
+ # b)year monthly sales
+ select `Order Date`,str_to_date(`Order Date`,'%d-%m-%y')from superstore;
+update superstore set `Order Date` = str_to_date(`Order Date`,'%d-%m-%Y'); 
+select date_format(`Order Date`,'%M-%y') as Monthly, round(sum(sales),2)
+from superstore
+group by Monthly;
+# c) sales by category
+select Category, round(sum(sales),2) as total from superstore
+group by Category;
+# d) sales by region
+select Region, round (sum(sales),2) as total from superstore
+group by Region;
+
+# e) profit analysis(total profit)
+select round(sum(profit),2)from superstore;
+# f) profit by category
+select Category, round(sum(profit),2) as total from superstore
+group by Category;
+# g) profit margin per sub- category
+select `Sub-Category`,round(sum(Profit)/sum(sales) *100,2) as profit_margin from superstore
+group by `Sub-Category`
+order by profit_margin desc;
+
+# h) customer analysis( top 10 customer by sales)
+select `Customer Name`, round(sum(sales),2) as total_purchase from superstore
+group by `Customer Name`
+order by total_purchase desc limit 10;
+# i) top 10 customer by region
+select `Customer Name`,Region, round(sum(sales),2) as total_purchase from superstore
+group by `Customer Name`, Region
+order by total_purchase desc;
+
+# i) using window function
+select `Customer Name`,Region, 
+sum(sales)  over(partition by region) as total_purchase from superstore;
+ # OR
+ select `Customer Name`,Region, 
+rank() over(partition by region order by sales) as rnk from superstore;
+#OR( top 10 customer by region)
+superstore select * from (select `Customer Name`,Region, 
+rank() over(partition by region order by sales desc) as rnk from superstore)
+as temp
+where rnk =1;
+# order analysis(top customer who has ordered most in his region)
+select distinct `Customer Name`,Region, count('order ID')
+over(partition by region order by `Customer Name`) as order_count
+from superstore;
+#OR
+ select * from (select*,
+dense_rank() over(partition by Region order by order_count desc) as rnk from
+(select distinct `Customer Name`,Region, count('order ID')
+over(partition by region order by `Customer Name`) as order_count
+from superstore) as temp) as temp2
+where rnk =1;
+
+
+#top selling product name per category
+select * from( with cte as (select `Category`,`Product Name`, sum(sales) 
+ as total_sale
+from superstore group by `Category`,`Product Name`)
+
+select*,
+dense_rank()over(partition by Category order by total_sale desc) 
+as rnk  from cte) as temp
+where rnk = 1;
+
+#most profitable product
+select `Product Name`, sum(Profit) as total_profit
+ from superstore group by `Product Name` order by total_profit desc limit 1;
+ 
+ #monthly-year growth in sales
+ with cte as (select date_format(`Order Date`, '%Y-%m') as MonthYear, 
+ sum(sales) as monthly_sale from superstore group by monthYear
+order by monthYear)
+select *,
+sum(monthly_sale) over(order by monthYear) as total_sale
+from cte;
+
+# monthly growth percent compare with last year
+  with cte2 as (with cte as (select date_format(`Order Date`, '%M') as `Month`, year(`Order Date`)
+as `Year`, sum(sales) as monthlySale from superstore group by `Month`,`Year`
+order by `Month`)
+select `Month`,
+       sum(case when `Year` =2011 then (monthlySale) else 0 end)
+       as `2011Year`,
+       
+       sum(case when `Year` =2012  then (monthlySale) else 0
+       end) as `2012Year`
+       from cte group by `Month`)
+       
+       select *, round(((`2012Year`-`2011Year`)/`2011Year`) *100,2)
+       as growth
+       from cte2;
+#test question
+# product analysis 1068
+# employee bonus 577
+# monthly transaction 1193
+# primary department for each employee 1789
+
+# ans 1 
+select p.product_name, s.year,s.price
+from sales as s
+left join 
+product as p
+on s.product_id=p.product_id;
+
+#ans 2
+select e.name,b.bonus
+from employee as e left join bonus as b
+on e.empId=b.empId
+where bonus<1000
+or b.bonus is null;
+
+# ans 3
+ select date_format(trans_date,'%Y-%m') as `month`, country,
+     count(id) as trans_count,
+     sum(case when state ='approved' then 1 else 0 end) as approved_count,
+     sum(amount) as trans_total_amount,
+     sum(case  when state ='approved' then amount else 0 end) as approved_total_amount
+from transactions 
+group by `month`,country;
+
+#ans4
+ with cte as (SELECT employee_id,  count(department_id) as total
+FROM  Employee
+group by employee_id)
+select cte.employee_id, department_id
+from employee
+ inner join cte
+ on Employee.employee_id=cte.employee_id
+where(total >1 and primary_flag = 'y') or total =1
+#or
+select employee_id, department_id from employee
+group by employee_id
+having count(department_id)=1
+union
+select employee_id,department_id from employee
+where primary_flag ='Y';
